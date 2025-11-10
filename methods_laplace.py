@@ -94,7 +94,7 @@ def laplace_od(obs, lat, lon, h, polydeg=3, make_tle=False, dbg=False, norad=999
     tle = None
     if make_tle:
         try:
-            tle = elements_to_tle_manual(elements, satnum=norad, epoch=times[mid].jd)
+            tle = elements_to_tle_manual(elements, satnum=norad, epoch_jd=times[mid].jd)
         except Exception:
             tle = None
     else:

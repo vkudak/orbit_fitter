@@ -112,32 +112,50 @@ def elements_to_tle(elements, epoch_time, sat_name='SAT'):
     line1, line2 = sat.sgp4_tle()
     return line1, line2
 
-def elements_to_tle_manual(elements, satnum=99999, epoch=0.0, name='SAT'):
+
+def tle_checksum(line):
+    """
+    Обчислює контрольну суму TLE для одного рядка.
+    Беремо всі цифри, плюс додаємо 1 за кожний знак '-'.
+    Результат mod 10.
+    """
+    s = 0
+    for c in line[:-1]:  # останній символ — це місце для checksum
+        if c.isdigit():
+            s += int(c)
+        elif c == '-':
+            s += 1
+    return str(s % 10)
+
+
+def elements_to_tle_manual(elements, satnum=99999, epoch_jd=0.0, name='SAT'):
     """
     Проста генерація TLE рядків вручну на основі орбітальних елементів.
     elements: словник з a(km), e, i(deg), raan(deg), argp(deg), nu(deg)
-    epoch: astropy Time JD (можна epoch.jd)
+    epoch: епоха у JD
+    Повертає: line1, line2 з правильними checksum
     """
-    a = elements['a']           # km
+    a = elements['a']  # km
     e = elements['e']
-    i = elements['i']           # deg
-    raan = elements['raan']     # deg
-    argp = elements['argp']     # deg
-    nu = elements['nu']         # deg
+    i = elements['i']  # deg
+    raan = elements['raan']  # deg
+    argp = elements['argp']  # deg
+    nu = elements['nu']  # deg
 
-    mu = 398600.4418            # km^3/s^2
-    # Mean motion [rev/day]
-    n = np.sqrt(mu / a**3) * 86400.0 / (2*np.pi)
+    # Середній рух [rev/day]
+    mu = 398600.4418  # km^3/s^2
+    n = np.sqrt(mu / a ** 3) * 86400.0 / (2 * np.pi)
 
-    # Eccentricity для TLE у форматі 7 знаків без децимальної крапки
-    e_tle = int(e * 1e7)
+    # Форматування елементів
+    e_tle = int(e * 1e7)  # TLE: 7 цифр без крапки
 
-    # Line 1 (заглушка, мінімальний обов'язковий формат)
-    line1 = f"1 {satnum:05d}U 00000A   {epoch:10.8f}  .00000000  00000-0  00000-0 0  9990"
+    # Line 1 (мінімальний обов'язковий формат)
+    # "U" – unclassified, 00000A – placeholder, остання цифра для checksum
+    line1 = f"1 {satnum:05d}U 00000A {epoch_jd:10.8f}  .00000000  00000-0  00000-0 0 "
+    line1 = line1.ljust(68) + tle_checksum(line1)  # padding до 68, 69-й - checksum
 
     # Line 2 (елементи орбіти)
-    line2 = (
-        f"2 {satnum:05d} {i:8.4f} {raan:8.4f} {e_tle:07d} {argp:8.4f} "
-        f"{nu:8.4f} {n:11.8f}00000"
-    )
+    line2 = f"2 {satnum:05d} {i:8.4f} {raan:8.4f} {e_tle:07d} {argp:8.4f} {nu:8.4f} {n:11.8f}0"
+    line2 = line2.ljust(68) + tle_checksum(line2)
+
     return line1, line2
