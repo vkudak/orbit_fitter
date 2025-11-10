@@ -29,68 +29,6 @@ def parse_ddmmss_dec(dec_str):
     ss = ss + frac
     return sign * (dd + mm/60.0 + ss/3600.0)
 
-def read_observations_old(filename):
-    """Read observations in the user's format (UTC, RA=HHMMSSss, DEC=+DDMMSSss).
-    Returns astropy.time.Time array, numpy arrays ras_deg, decs_deg, errs, mags.
-    """
-    times = []
-    ras = []
-    decs = []
-    errs = []
-    mags = []
-    objects_data = {}
-
-    with (open(filename, 'r', encoding='utf-8') as f):  # windows-1251
-        current_object = None
-        current_data = []
-        current_point_number = None  # Номер пункту
-        for line in f:
-            s = line.strip()
-            if len(s.split()) == 3: # CИСТ 10092 023855
-                current_object = int(s.split()[2])
-                current_point_number = int(s.split()[1])
-            if len(s.split()) == 5: # data
-                parts = s.split()
-
-                date_str, time_str, ra_str, dec_str, val_str = parts[:5]
-                yy = int(date_str[0:2])
-                year = 2000 + yy
-                month = int(date_str[2:4])
-                day = int(date_str[4:6])
-                hh = int(time_str[0:2])
-                mm = int(time_str[2:4])
-                ss = int(time_str[4:6])
-                frac = 0.0
-                if len(time_str) > 6:
-                    tail = time_str[6:]
-                    frac = float('0.' + tail)
-                timestr = f"{year:04d}-{month:02d}-{day:02d}T{hh:02d}:{mm:02d}:{ss:02d}"
-                if frac:
-                    timestr += f"{frac:.6f}"[1:]
-                t = Time(timestr, format='isot', scale='utc')
-
-                ra_deg = parse_hhmmss_ra(ra_str)
-                dec_deg = parse_ddmmss_dec(dec_str)
-
-                err = int(val_str[0:3])
-                mag = int(val_str[3:]) / 10.0 if len(val_str) > 3 else 0.0
-
-                times.append(t)
-                ras.append(ra_deg)
-                decs.append(dec_deg)
-                errs.append(err)
-                mags.append(mag)
-
-            if len(s)==5: # END
-                objects_data[current_object] = [
-                    Time(times),
-                    np.array(ras), np.array(decs),
-                    np.array(errs), np.array(mags),
-                    current_point_number
-                ]
-
-    return objects_data
-
 def _safe_decode(line_bytes):
     """Try UTF-8, then CP1251, else decode with replacement."""
     try:
@@ -187,10 +125,10 @@ def read_observations(filename):
             elif len(parts) >= 5:
                 date_str, time_str, ra_str, dec_str, val_str = parts[:5]
                 try:
-                    yy = int(date_str[0:2])
+                    yy = int(date_str[4:6])
                     year = 2000 + yy
                     month = int(date_str[2:4])
-                    day = int(date_str[4:6])
+                    day = int(date_str[0:2])
                     hh = int(time_str[0:2])
                     mm = int(time_str[2:4])
                     ss = int(time_str[4:6])

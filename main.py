@@ -20,6 +20,7 @@ def main():
     args = parser.parse_args()
 
     norad = 28358
+    cospar = '04022A'
     file_obs = read_observations(args.obs_file)
     obs_n = file_obs[norad]
 
@@ -36,9 +37,9 @@ def main():
     for m in methods:
         print(f"Running {m}...")
         if m == 'gauss':
-            state = gauss_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad)
+            state = gauss_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
         elif m == 'laplace':
-            state = laplace_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad)
+            state = laplace_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
 
         r_opt, v_opt = refine_solution(obs, state, args.lat, args.lon, args.h)
         rms = compute_rms(obs, (r_opt, v_opt), args.lat, args.lon, args.h)
@@ -65,6 +66,8 @@ def main():
     for k, v in best_data['elements'].items():
         if k in ['i', 'raan', 'argp', 'nu']:
             print(f"{k}: {v:.3f} deg")
+        elif k in ['e']:
+            print(f"{k}: {v:.3f}")
         else:
             print(f"{k}: {v:.3f} km")
 

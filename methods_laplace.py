@@ -3,7 +3,7 @@ from geometry import ra_dec_to_unitvec_icrs, station_positions_gcrs
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 from poliastro.core.elements import rv2coe
-from tle_compare import elements_to_tle_manual
+from tle_compare import elements_to_tle_manual, create_tle_manual
 
 from constants import R_GEO, MU_EARTH
 
@@ -12,7 +12,7 @@ def wrap_ra_deg(ra_deg):
     return np.rad2deg(np.unwrap(np.deg2rad(ra_deg)))
 
 
-def laplace_od(obs, lat, lon, h, polydeg=3, make_tle=False, dbg=False, norad=99999):
+def laplace_od(obs, lat, lon, h, polydeg=3, make_tle=False, dbg=False, norad=99999, cospar='25001A'):
     times, ras, decs, _, _, _ = obs
     n = len(times)
     if n < 5:
@@ -91,10 +91,10 @@ def laplace_od(obs, lat, lon, h, polydeg=3, make_tle=False, dbg=False, norad=999
         "nu": np.degrees(nu)
     }
 
-    tle = None
     if make_tle:
         try:
-            tle = elements_to_tle_manual(elements, satnum=norad, epoch_jd=times[mid].jd)
+            # tle = elements_to_tle_manual(elements, satnum=norad, cospar=cospar, epoch_jd=times[mid].jd)
+            tle = create_tle_manual(elements, norad=norad, cospar=cospar, epoch=times[mid].jd)
         except Exception:
             tle = None
     else:

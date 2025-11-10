@@ -5,6 +5,8 @@ from astropy.time import Time
 from astropy.coordinates import TEME, GCRS, ICRS, CartesianRepresentation
 import astropy.units as u
 import warnings
+from datetime import datetime, timezone
+
 
 warnings.filterwarnings("ignore", category=UserWarning, append=True)
 
@@ -128,34 +130,127 @@ def tle_checksum(line):
     return str(s % 10)
 
 
-def elements_to_tle_manual(elements, satnum=99999, epoch_jd=0.0, name='SAT'):
+def jd_to_epoch_day(jd):
+    """
+    Перетворює JD у (epoch_year, day_of_year.fraction)
+    """
+    t = Time(jd, format='jd')
+    yy = t.datetime.year % 100
+    doy = t.datetime.timetuple().tm_yday
+    frac_day = (t.datetime.hour*3600 + t.datetime.minute*60 + t.datetime.second + t.datetime.microsecond/1e6) / 86400.0
+    return yy, doy + frac_day
+
+
+def elements_to_tle_manual(elements, satnum=99999, cospar="98067A",
+                           epoch_jd=2454975.5, element_set_number=18,
+                           rev_number=6, bstar=0.0):
     """
     Проста генерація TLE рядків вручну на основі орбітальних елементів.
     elements: словник з a(km), e, i(deg), raan(deg), argp(deg), nu(deg)
     epoch: епоха у JD
     Повертає: line1, line2 з правильними checksum
     """
-    a = elements['a']  # km
+    a = elements['a']
     e = elements['e']
-    i = elements['i']  # deg
-    raan = elements['raan']  # deg
-    argp = elements['argp']  # deg
-    nu = elements['nu']  # deg
+    i = elements['i']
+    raan = elements['raan']
+    argp = elements['argp']
+    nu = elements['nu']
 
     # Середній рух [rev/day]
     mu = 398600.4418  # km^3/s^2
     n = np.sqrt(mu / a ** 3) * 86400.0 / (2 * np.pi)
 
-    # Форматування елементів
-    e_tle = int(e * 1e7)  # TLE: 7 цифр без крапки
+    # JD → epoch
+    yy, epoch_day = jd_to_epoch_day(epoch_jd)
 
-    # Line 1 (мінімальний обов'язковий формат)
-    # "U" – unclassified, 00000A – placeholder, остання цифра для checksum
-    line1 = f"1 {satnum:05d}U 00000A {epoch_jd:10.8f}  .00000000  00000-0  00000-0 0 "
-    line1 = line1.ljust(68) + tle_checksum(line1)  # padding до 68, 69-й - checksum
+    # Форматуємо e для TLE (7 цифр без крапки)
+    e_tle = int(e * 1e7)
 
-    # Line 2 (елементи орбіти)
-    line2 = f"2 {satnum:05d} {i:8.4f} {raan:8.4f} {e_tle:07d} {argp:8.4f} {nu:8.4f} {n:11.8f}0"
-    line2 = line2.ljust(68) + tle_checksum(line2)
+    line1 = (
+            "1" +
+            f"{satnum:5d}" +  # 3–7
+            "U" +
+            f"{cospar:<8}" +  # 10–17
+            f"{yy:02d}{epoch_day:012.8f}" +  # 19–32
+            f" {0.0:10.8f}" +  # First derivative, 34–43
+            " 00000-0" +  # Second derivative, 45–52
+            f" {int(bstar * 1e5):07d}-0" +  # B*, 54–61
+            " 0" +  # Ephemeris type, 63
+            f"{element_set_number:>4}"  # Element set number, 65–68
+    )
+    line1 = line1[:68] + tle_checksum(line1)  # 69-й символ
+
+    # --- Рядок 2 ---
+    line2 = (
+            "2" +
+            f"{satnum:5d}" +  # 3–7
+            f"{i:8.4f}" +  # 9–16
+            f"{raan:8.4f}" +  # 18–25
+            f"{e_tle:07d}" +  # 27–33
+            f"{argp:8.4f}" +  # 35–42
+            f"{nu:8.4f}" +  # 44–51
+            f"{n:11.8f}" +  # 53–63
+            f"{rev_number:5d}"  # 64–68
+    )
+    line2 = line2[:68] + tle_checksum(line2)
+
+    return line1, line2
+
+# (elements, norad=norad, cospar=cospar, epoch=times[mid].jd)
+def create_tle_manual(tle_elems, norad=9999, cospar='25001A', epoch=0.0):
+    """
+    Генерує стандартний TLE рядок (2 рядки, 69 символів) з орбітального словника.
+    """
+    # Розбір COSPAR
+    obj_id = cospar  # приклад: "98067A"
+    launch_year = int(obj_id[:2])
+    launch_num = int(obj_id[2:5])
+    launch_piece = obj_id[5:]
+    cospar = f"{launch_year % 100:02d}{launch_num:03d}{launch_piece}"
+
+    # Epoch у форматі YYDDD.DDDDDDDD
+    # JD → epoch
+    yy, epoch_day = jd_to_epoch_day(epoch)
+
+    epoch_str = f"{yy:02d}{epoch_day:012.8f}"
+
+    # First derivative of mean motion
+    mm_dot = float(tle_elems.get("MEAN_MOTION_DOT", 0.0))
+    mm_dot_str = f"{mm_dot: .8f}"
+
+    # Second derivative (assumed 0, format e.g., 00000-0)
+    mm_ddot_str = "00000-0"
+
+    # Середній рух [rev/day]
+    mu = 398600.4418  # km^3/s^2
+    a = tle_elems['a']
+    n = np.sqrt(mu / a ** 3) * 86400.0 / (2 * np.pi)
+
+    # B* drag term
+    bstar = float(tle_elems.get("BSTAR", 0.0))
+    bstar_str = f"{int(bstar*1e5):07d}-0"
+
+    # Line 1
+    line1 = (
+        f"1 {int(norad):05d}U {cospar} "
+        f"{epoch_str} {mm_dot_str} {mm_ddot_str} {bstar_str} 0 "
+        f"{int(6):4d}"
+    ).ljust(68)
+    line1 += tle_checksum(line1)
+
+    # Line 2
+    e_str = f"{int(float(tle_elems['e'])*1e7):07d}"
+    line2 = (
+        f"2 {int(norad):05d} "
+        f"{float(tle_elems['e']):8.4f} "
+        f"{float(tle_elems['raan']):8.4f} "
+        f"{e_str} "
+        f"{float(tle_elems['argp']):8.4f} "
+        f"{float(tle_elems['nu']):8.4f} "
+        f"{float(n):11.8f} "
+        f"{int(8):5d}"
+    ).ljust(68)
+    line2 += tle_checksum(line2)
 
     return line1, line2

@@ -2,7 +2,7 @@ import numpy as np
 from geometry import ra_dec_to_unitvec_icrs, station_positions_gcrs
 from methods_gibbs import gibbs_velocity
 from poliastro.core.elements import rv2coe
-from tle_compare import elements_to_tle_manual
+from tle_compare import elements_to_tle_manual, create_tle_manual
 
 from constants import R_GEO, MU_EARTH
 
@@ -46,7 +46,7 @@ def _debug_print_state(r1, r2, r3, v2, times, i1, i2, i3):
     print("===================")
 
 
-def gauss_od(obs, lat, lon, h, make_tle=False, dbg=False, norad=99999):
+def gauss_od(obs, lat, lon, h, make_tle=False, dbg=False, norad=99999, cospar='25001A'):
     times, ras, decs, errs, mags, site_n = obs
 
     idx = np.argsort(times)
@@ -135,7 +135,8 @@ def gauss_od(obs, lat, lon, h, make_tle=False, dbg=False, norad=99999):
 
     if make_tle:
         try:
-            tle = elements_to_tle_manual(elements, satnum=norad, epoch_jd=times[mid].jd)
+            # tle = elements_to_tle_manual(elements, satnum=norad, cospar=cospar, epoch_jd=times[mid].jd)
+            tle = create_tle_manual(elements, norad=norad, cospar=cospar, epoch=times[mid].jd)
         except Exception:
             tle = None
     else:
