@@ -19,8 +19,9 @@ def main():
     parser.add_argument('--out-csv')
     args = parser.parse_args()
 
+    norad = 28358
     file_obs = read_observations(args.obs_file)
-    obs_n = file_obs[28358]
+    obs_n = file_obs[norad]
 
     times, ras, decs, errs, mags, site_n = (
         obs_n["time"], obs_n["ra"], obs_n["dec"], obs_n["err"], obs_n["mag"], obs_n["point"]
@@ -35,19 +36,50 @@ def main():
     for m in methods:
         print(f"Running {m}...")
         if m == 'gauss':
-            state = gauss_od(obs, args.lat, args.lon, args.h)
+            state = gauss_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad)
         elif m == 'laplace':
-            state = laplace_od(obs, args.lat, args.lon, args.h)
+            state = laplace_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad)
 
         r_opt, v_opt = refine_solution(obs, state, args.lat, args.lon, args.h)
         rms = compute_rms(obs, (r_opt, v_opt), args.lat, args.lon, args.h)
-        results[m] = {'r': r_opt, 'v': v_opt, 'rms': rms}
+
+        # зберігаємо усе: r, v, rms, елементи та tle
+        results[m] = {
+            'r': r_opt,
+            'v': v_opt,
+            'rms': rms,
+            'elements': state['elements'],
+            'tle': state['tle']
+        }
+
         print(f"{m} RMS: {rms:.3f} arcsec")
 
+    # Вибір найкращого за RMS
+    best = min(results.items(), key=lambda kv: kv[1]['rms'])
+    best_method, best_data = best[0], best[1]
+
+    print(f"\nBest method: {best_method} with RMS {best_data['rms']:.3f} arcsec")
+
+    # Вивід орбітальних елементів
+    print("\n=== Orbital Elements ===")
+    for k, v in best_data['elements'].items():
+        if k in ['i', 'raan', 'argp', 'nu']:
+            print(f"{k}: {v:.3f} deg")
+        else:
+            print(f"{k}: {v:.3f} km")
+
+    # Вивід TLE, якщо є
+    if best_data['tle'] is not None:
+        print("\n=== TLE ===")
+        print(best_data['tle'][0])
+        print(best_data['tle'][1])
+    else:
+        print('No TLE data')
+
+    # Порівняння з TLE, якщо задано
     if args.tle_line1 and args.tle_line2:
-        best = min(results.items(), key=lambda kv: kv[1]['rms'])
-        print(f"Best method: {best[0]} with RMS {best[1]['rms']:.3f} arcsec")
-        compare_with_tle(obs, (best[1]['r'], best[1]['v']), args.tle_line1, args.tle_line2, args.out_csv)
+        compare_with_tle(obs, (best_data['r'], best_data['v']),
+                         args.tle_line1, args.tle_line2, args.out_csv)
 
 if __name__ == '__main__':
     main()

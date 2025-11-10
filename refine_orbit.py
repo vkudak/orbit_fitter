@@ -32,7 +32,7 @@ def residuals_vec(x, times, ras_obs, decs_obs):
 
 def refine_solution(obs, state, lat, lon, h):
     times, ras, decs, errs, mags, site_n = obs
-    r0, v0 = state
+    r0, v0 = state["r"], state["v"]
     x0 = np.hstack((r0, v0))
     res = least_squares(lambda x: residuals_vec(x, times, ras, decs), x0, verbose=1, max_nfev=200)
     r_opt = res.x[0:3]
