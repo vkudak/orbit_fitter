@@ -20,7 +20,7 @@ def solve_range_quadratic(R_site, los, R_target=R_GEO):
     return min(candidates)
 
 def gauss_od(obs, lat, lon, h):
-    times, ras, decs, errs, mags = obs
+    times, ras, decs, errs, mags, site_n = obs
     n = len(times)
     i1, i2, i3 = 0, n//2, n-1
     los = ra_dec_to_unitvec_icrs(ras, decs)

@@ -7,10 +7,17 @@ def wrap_ra_deg(ra_deg):
     return np.rad2deg(np.unwrap(np.deg2rad(ra_deg)))
 
 def laplace_od(obs, lat, lon, h, polydeg=3):
-    times, ras, decs, errs, mags = obs
+    times, ras, decs, _, _, _ = obs
     n = len(times)
     if n < 5:
         raise ValueError('Laplace: at least 5 observations recommended')
+
+    idx = np.argsort(times)
+    times = times[idx]
+    ras = ras[idx]
+    decs = decs[idx]
+
+
     mid = n//2
     t0 = times[mid]
     dt = np.array([(t - t0).to('s').value for t in times])

@@ -1,4 +1,6 @@
 import argparse
+import sys
+
 from io_utils import read_observations, read_tle_lines
 from methods_gauss import gauss_od
 from methods_laplace import laplace_od
@@ -8,16 +10,26 @@ from tle_compare import compare_with_tle
 def main():
     parser = argparse.ArgumentParser(description='Orbit determination from optical measurements')
     parser.add_argument('obs_file')
-    parser.add_argument('--lat', type=float, required=True)
-    parser.add_argument('--lon', type=float, required=True)
-    parser.add_argument('--h', type=float, default=0.0)
+    parser.add_argument('--lat', type=float, required=False, default=22.453751)
+    parser.add_argument('--lon', type=float, required=False, default=48.5635505)
+    parser.add_argument('--h', type=float, default=231.1325)
     parser.add_argument('--method', choices=['gauss','laplace','all'], default='all')
     parser.add_argument('--tle-line1')
     parser.add_argument('--tle-line2')
     parser.add_argument('--out-csv')
     args = parser.parse_args()
 
-    obs = read_observations(args.obs_file)
+    file_obs = read_observations(args.obs_file)
+    obs_n = file_obs[28358]
+
+    times, ras, decs, errs, mags, site_n = (
+        obs_n["time"], obs_n["ra"], obs_n["dec"], obs_n["err"], obs_n["mag"], obs_n["point"]
+    )
+    obs = times, ras, decs, errs, mags, site_n
+
+    # 1 28358U 04022A   23128.35604840  .00000000  00000-0  00000+0 0  9999
+    # 2 28358   0.0058  35.1860 0001190  22.4337 295.5316  1.00273719 69237
+
     methods = ['gauss','laplace'] if args.method == 'all' else [args.method]
     results = {}
     for m in methods:
@@ -26,6 +38,7 @@ def main():
             state = gauss_od(obs, args.lat, args.lon, args.h)
         elif m == 'laplace':
             state = laplace_od(obs, args.lat, args.lon, args.h)
+
         r_opt, v_opt = refine_solution(obs, state, args.lat, args.lon, args.h)
         rms = compute_rms(obs, (r_opt, v_opt), args.lat, args.lon, args.h)
         results[m] = {'r': r_opt, 'v': v_opt, 'rms': rms}

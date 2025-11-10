@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.optimize import least_squares
-from astropy.coordinates import GCRS
+from astropy.coordinates import GCRS, ICRS, CartesianRepresentation
 import astropy.units as u
 from poliastro.bodies import Earth
 from poliastro.twobody.orbit import Orbit
@@ -12,8 +12,11 @@ def propagate_state_to_radec(r0, v0, epoch, times):
     for t in times:
         tof = (t - epoch).to(u.s)
         rr = orb.propagate(tof).r.to(u.km).value
-        g = GCRS(x=rr[0]*u.km, y=rr[1]*u.km, z=rr[2]*u.km, obstime=t)
-        ic = g.transform_to('icrs')
+        # g = GCRS(x=rr[0]*u.km, y=rr[1]*u.km, z=rr[2]*u.km, obstime=t)
+        rep = CartesianRepresentation(rr[0] * u.km, rr[1] * u.km, rr[2] * u.km)
+        g= GCRS(rep, obstime=t)
+        # ic = g.transform_to('icrs')
+        ic = g.transform_to(ICRS())
         ras.append(ic.ra.deg)
         decs.append(ic.dec.deg)
     return np.array(ras), np.array(decs)
@@ -28,7 +31,7 @@ def residuals_vec(x, times, ras_obs, decs_obs):
     return np.hstack((dra, ddec))
 
 def refine_solution(obs, state, lat, lon, h):
-    times, ras, decs, errs, mags = obs
+    times, ras, decs, errs, mags, site_n = obs
     r0, v0 = state
     x0 = np.hstack((r0, v0))
     res = least_squares(lambda x: residuals_vec(x, times, ras, decs), x0, verbose=1, max_nfev=200)
@@ -37,7 +40,7 @@ def refine_solution(obs, state, lat, lon, h):
     return r_opt, v_opt
 
 def compute_rms(obs, state, lat, lon, h):
-    times, ras, decs, errs, mags = obs
+    times, ras, decs, errs, mags, site_n = obs
     r0, v0 = state
     ras_pred, decs_pred = propagate_state_to_radec(r0, v0, times[len(times)//2], times)
     dra = (ras_pred - ras) * 3600.0 * np.cos(np.deg2rad(decs))
