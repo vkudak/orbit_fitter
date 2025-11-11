@@ -6,6 +6,7 @@ from geometry import topo_to_geo, iterative_topo_to_geo, iterative_topo_to_geo_v
 from io_utils import read_observations, read_tle_lines
 from methods_gauss import gauss_od
 from methods_laplace import laplace_od
+from methods_orekit import orekit_od
 from refine_orbit import refine_solution, compute_rms
 from tle_compare import compare_with_tle
 
@@ -15,7 +16,7 @@ def main():
     parser.add_argument('--lat', type=float, required=False, default=22.453751)
     parser.add_argument('--lon', type=float, required=False, default=48.5635505)
     parser.add_argument('--h', type=float, default=231.1325)
-    parser.add_argument('--method', choices=['gauss','laplace','all'], default='all')
+    parser.add_argument('--method', choices=['gauss','laplace','orekit', 'all'], default='all')
     parser.add_argument('--tle-line1')
     parser.add_argument('--tle-line2')
     parser.add_argument('--out-csv')
@@ -38,14 +39,21 @@ def main():
     # 1 28358U 04022A   23128.35604840  .00000000  00000-0  00000+0 0  9999
     # 2 28358   0.0058  35.1860 0001190  22.4337 295.5316  1.00273719 69237
 
-    methods = ['gauss','laplace'] if args.method == 'all' else [args.method]
+    methods = ['gauss','laplace', 'orekit'] if args.method == 'all' else [args.method]
     results = {}
+    state = None
     for m in methods:
         print(f"Running {m}...")
         if m == 'gauss':
             state = gauss_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
         elif m == 'laplace':
             state = laplace_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
+        elif m == 'orekit' and state is not None:
+            state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar,
+                              initial_state=state)
+        elif m == 'orekit' and state is None:
+            state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
+
 
         r_opt, v_opt = refine_solution(obs, state, args.lat, args.lon, args.h)
         rms = compute_rms(obs, (r_opt, v_opt), args.lat, args.lon, args.h)

@@ -19,7 +19,18 @@ Notes:
 - TLE comparison outputs CSV with columns: datetime, obs_RA, obs_DEC, tle_RA, tle_DEC, dra_arcsec, ddec_arcsec.
 
 Dependencies (install locally):
-  pip install numpy scipy astropy poliastro sgp4
+
+  `pip install -r requirements.txt`
+
+To use Orekit orbit fit JAVA JDK 17+ Should be installer
+
+  `sudo apt update`
+  
+  `sudo apt install -y openjdk-17-jdk`
+
+After install make sure you got JAVA_HOME = 'path/to/java_jdk'
+  
 
 Usage example:
-  python main.py obs.txt --lat 48.63 --lon 22.33 --h 242 --method all --tle-line1 "TLE_LINE1" --tle-line2 "TLE_LINE2" --out-csv residuals.csv
+
+  `python main.py obs.txt --lat 48.63 --lon 22.33 --h 242 --method all --tle-line1 "TLE_LINE1" --tle-line2 "TLE_LINE2" --out-csv residuals.csv`

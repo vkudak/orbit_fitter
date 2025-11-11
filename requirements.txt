@@ -49,3 +49,5 @@ tzdata==2025.2
 urllib3==2.5.0
 webencodings==0.5.1
 zipp==3.23.0
+jpype1==1.6.0
+orekit-jpype==13.1.2.1
