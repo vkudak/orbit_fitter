@@ -1,6 +1,8 @@
 import argparse
 import sys
 
+from constants import R_GEO, RANGE_GEO
+from geometry import topo_to_geo, iterative_topo_to_geo, iterative_topo_to_geo_v2, topo_to_geo_v3
 from io_utils import read_observations, read_tle_lines
 from methods_gauss import gauss_od
 from methods_laplace import laplace_od
@@ -19,15 +21,19 @@ def main():
     parser.add_argument('--out-csv')
     args = parser.parse_args()
 
-    norad = 28358
-    cospar = '04022A'
+    norad = 15543
+    cospar = '85010B'
     file_obs = read_observations(args.obs_file)
     obs_n = file_obs[norad]
 
     times, ras, decs, errs, mags, site_n = (
         obs_n["time"], obs_n["ra"], obs_n["dec"], obs_n["err"], obs_n["mag"], obs_n["point"]
     )
-    obs = times, ras, decs, errs, mags, site_n
+    geo_ras, geo_decs = topo_to_geo(times, ras, decs, args.lat, args.lon, args.h, assumed_range_km=RANGE_GEO)
+
+    # geo_ras, geo_decs = topo_to_geo_v3(times, ras, decs, args.lat, args.lon, args.h, assumed_range_km=RANGE_GEO)
+
+    obs = times, geo_ras, geo_decs, errs, mags, site_n
 
     # 1 28358U 04022A   23128.35604840  .00000000  00000-0  00000+0 0  9999
     # 2 28358   0.0058  35.1860 0001190  22.4337 295.5316  1.00273719 69237

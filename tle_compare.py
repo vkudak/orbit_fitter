@@ -217,10 +217,10 @@ def create_tle_manual(tle_elems, norad=9999, cospar='25001A', epoch=0.0):
 
     # First derivative of mean motion
     mm_dot = float(tle_elems.get("MEAN_MOTION_DOT", 0.0))
-    mm_dot_str = f"{mm_dot: .8f}"
+    mm_dot_str = f"{mm_dot:.8f}"
 
     # Second derivative (assumed 0, format e.g., 00000-0)
-    mm_ddot_str = "00000-0"
+    mm_ddot_str = " 00000-0"
 
     # Середній рух [rev/day]
     mu = 398600.4418  # km^3/s^2
@@ -228,29 +228,30 @@ def create_tle_manual(tle_elems, norad=9999, cospar='25001A', epoch=0.0):
     n = np.sqrt(mu / a ** 3) * 86400.0 / (2 * np.pi)
 
     # B* drag term
-    bstar = float(tle_elems.get("BSTAR", 0.0))
-    bstar_str = f"{int(bstar*1e5):07d}-0"
+    # bstar = float(tle_elems.get("BSTAR", 0.0))
+    # bstar_str = f"{int(bstar*1e5):07d}-0"
+    bstar_str = ' 00000-0'
 
     # Line 1
     line1 = (
-        f"1 {int(norad):05d}U {cospar} "
+        f"1 {int(norad):05d}U {cospar[:-1]}{cospar[-1]:3s} "
         f"{epoch_str} {mm_dot_str} {mm_ddot_str} {bstar_str} 0 "
         f"{int(6):4d}"
-    ).ljust(68)
+    )
     line1 += tle_checksum(line1)
 
     # Line 2
     e_str = f"{int(float(tle_elems['e'])*1e7):07d}"
     line2 = (
         f"2 {int(norad):05d} "
-        f"{float(tle_elems['e']):8.4f} "
+        f"{float(tle_elems['i']):8.4f} "
         f"{float(tle_elems['raan']):8.4f} "
         f"{e_str} "
         f"{float(tle_elems['argp']):8.4f} "
         f"{float(tle_elems['nu']):8.4f} "
         f"{float(n):11.8f} "
-        f"{int(8):5d}"
-    ).ljust(68)
+        f"{int(8):4d}"
+    )
     line2 += tle_checksum(line2)
 
     return line1, line2
