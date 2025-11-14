@@ -4,13 +4,13 @@ import numpy as np
 from math import radians
 import jpype.imports
 from jpype import JClass, JArray, JDouble, getDefaultJVMPath
-
+# from poliastro.twobody.elements import mean_motion
 
 
 # ================================================================
 # 1️⃣  ІНІЦІАЛІЗАЦІЯ JVM І ЗАВАНТАЖЕННЯ OREKIT
 # ================================================================
-def init_jvm_orekit(orekit_dir="./orekit_lib", data_dir="orekit-data"):
+def init_jvm_orekit(orekit_dir="orekit_lib", data_dir="orekit-data"):
     """
     Ініціалізує JVM з Orekit та Hipparchus JAR-файлів.
     Викликається один раз перед роботою з Orekit через JPype.
@@ -22,13 +22,30 @@ def init_jvm_orekit(orekit_dir="./orekit_lib", data_dir="orekit-data"):
         print("ℹ️ JVM уже запущено, ініціалізація пропущена.")
         return
 
-    # Пошук JAR-файлів у каталозі
-    if not os.path.exists(orekit_dir):
-        raise FileNotFoundError(f"Каталог з JAR-файлами не знайдено: {orekit_dir}")
+    # --- 💡 Зміни тут: Визначення шляху до теки скрипта ---
+    # Отримуємо абсолютний шлях до теки, де знаходиться цей Python-файл
+    # Якщо це головний файл, використовуємо sys.argv[0], інакше можна використати __file__
+    # Для модуля/скрипта, що викликається, зазвичай безпечно використовувати:
+    if getattr(sys, 'frozen', False):
+        # Якщо програма запущена як виконаний файл (наприклад, pyinstaller)
+        script_dir = os.path.dirname(sys.executable)
+    else:
+        # Для звичайного Python-скрипта
+        # Використовуємо abspath і dirname від шляху поточного файлу
+        script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    jar_files = [os.path.join(orekit_dir, f) for f in os.listdir(orekit_dir) if f.endswith(".jar")]
+    # Формуємо абсолютні шляхи до папок, які повинні лежати поруч зі скриптом
+    abs_orekit_dir = os.path.join(script_dir, orekit_dir)
+    abs_data_dir = os.path.join(script_dir, data_dir)
+    # ----------------------------------------------------
+
+    # Пошук JAR-файлів у каталозі
+    if not os.path.exists(abs_orekit_dir):
+        raise FileNotFoundError(f"Каталог з JAR-файлами не знайдено: {abs_orekit_dir}")
+
+    jar_files = [os.path.join(abs_orekit_dir, f) for f in os.listdir(abs_orekit_dir) if f.endswith(".jar")]
     if not jar_files:
-        raise RuntimeError(f"У каталозі {orekit_dir} не знайдено жодного .jar файлу")
+        raise RuntimeError(f"У каталозі {abs_orekit_dir} не знайдено жодного .jar файлу")
 
     # Формуємо classpath
     classpath_sep = ";" if sys.platform.startswith("win") else ":"
@@ -36,7 +53,7 @@ def init_jvm_orekit(orekit_dir="./orekit_lib", data_dir="orekit-data"):
 
     jvm_path = getDefaultJVMPath()
     print(f"🟢 Використовується JVM: {jvm_path}")
-    print(f"🟢 Завантаження JAR-файлів з: {orekit_dir}")
+    print(f"🟢 Завантаження JAR-файлів з: {abs_orekit_dir}")
 
     jpype.startJVM(
         jvm_path,
@@ -50,12 +67,9 @@ def init_jvm_orekit(orekit_dir="./orekit_lib", data_dir="orekit-data"):
     from java.io import File
 
     manager = DataContext.getDefault().getDataProvidersManager()
-    manager.addProvider(DirectoryCrawler(File(data_dir)))
+    manager.addProvider(DirectoryCrawler(File(abs_data_dir)))
     # print(manager)
-    print(f"✅ Orekit data loaded successfully from: {data_dir}")
-
-
-
+    print(f"✅ Orekit data loaded successfully from: {abs_data_dir}")
 
 
 
@@ -110,6 +124,7 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
         "org.hipparchus.optim.nonlinear.vector.leastsquares.LevenbergMarquardtOptimizer")
     NewtonianAttraction = JClass("org.orekit.forces.gravity.NewtonianAttraction")
     OrbitType = JClass("org.orekit.orbits.OrbitType")
+    EquinoctialOrbit = JClass("org.orekit.orbits.EquinoctialOrbit")
 
     UTC = TimeScalesFactory.getUTC()
     IERSConventions = JClass("org.orekit.utils.IERSConventions")
@@ -132,107 +147,122 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
     # Якщо початковий стан не заданий — створимо грубе коло
     date = datetime_to_absolutedate(times[0])
     if initial_state is None:
-        a = EARTH_RADIUS + 700e3
+        a = EARTH_RADIUS + 35786e3
         v = np.sqrt(MU / a)
         pv = PVCoordinates(Vector3D(float(a), 0.0, 0.0), Vector3D(0.0, float(v), 0.0))
-        initial_state = CartesianOrbit(pv, TEME, date, MU)
+        # initial_state = CartesianOrbit(pv, TEME, date, MU)
+
+        # cartesian_orbit = CartesianOrbit(pv, TEME, date, MU)
+        # initial_state = EquinoctialOrbit(cartesian_orbit)
+        initial_state = EquinoctialOrbit(pv, TEME, date, MU)
     else:
-        r2 = initial_state["r"]  # Вектор позиції (m)
-        v2 = initial_state["v"]  # Вектор швидкості (m/s)
-
-        # Перетворення списків/масивів у Vector3D (припускаючи, що r2 і v2 - це масиви/списки з 3 елементів)
-        position = Vector3D(float(r2[0]), float(r2[1]), float(r2[2]))
-        velocity = Vector3D(float(v2[0]), float(v2[1]), float(v2[2]))
-
-        pv = PVCoordinates(position, velocity)
-        date = datetime_to_absolutedate(times[0])
-        initial_state = CartesianOrbit(pv, TEME, date, MU)
-        # elements = initial_state["elements"]
+        # r2 = initial_state["r"]  # Вектор позиції (m)
+        # v2 = initial_state["v"]  # Вектор швидкості (m/s)
         #
-        # # Перетворення елементів: кути з градусів у радіани
-        # a = elements["a"]  # Велика піввісь (м)
-        # e = elements["e"]  # Ексцентриситет
-        # i = np.radians(elements["i"])  # Нахил (радіани)
-        # raan = np.radians(elements["raan"])  # Довгота висхідного вузла (радіани)
-        # argp = np.radians(elements["argp"])  # Аргумент перицентру (радіани)
-        # nu = np.radians(elements["nu"])  # Справжня аномалія (радіани)
+        # # Перетворення списків/масивів у Vector3D (припускаючи, що r2 і v2 - це масиви/списки з 3 елементів)
+        # position = Vector3D(float(r2[0]), float(r2[1]), float(r2[2]))
+        # velocity = Vector3D(float(v2[0]), float(v2[1]), float(v2[2]))
         #
-        # # Створення KeplerianOrbit
-        # initial_state = KeplerianOrbit(
-        #     a, e, i, raan, argp, nu,
-        #     PositionAngleType.TRUE,  # Вказуємо, що nu - це Справжня аномалія
-        #     TEME, date, MU
-        # )
+        # pv = PVCoordinates(position, velocity)
+        # date = datetime_to_absolutedate(times[0])
+        # # initial_state = CartesianOrbit(pv, TEME, date, MU)
+        # # cartesian_orbit = CartesianOrbit(pv, TEME, date, MU)
+        # # initial_state = EquinoctialOrbit(cartesian_orbit)
+        # initial_state = EquinoctialOrbit(pv, TEME, date, MU)
 
-    # # Побудова пропагатора
-    # propagator_builder = NumericalPropagatorBuilder(
-    #     initial_state,
-    #     DormandPrince853IntegratorBuilder(1.0, 300.0, 1.0e-3),
-    #     PositionAngleType.TRUE,
-    #     1.0
-    # )
-    # gravity = NewtonianAttraction(MU)
-    # propagator_builder.addForceModel(gravity)
+        # 1. Створення KeplerianOrbit на основі результатів Лапласа, але з e = 0.0
+        # Кутова позиція - True Anomaly (nu)
+        elements = initial_state['elements']
+        semi_major_axis = elements['a'] * 1000 # У метрах
+        eccentricity = elements['e'] #0.0001  # ❗️ Створюємо кругову орбіту
+        inclination = np.radians(elements['i'])
+        raan = np.radians(elements['raan'])
+        arg_of_pericenter = np.radians(elements['argp'])
+        true_anomaly = np.radians(elements['nu'])
 
-    # Визначте константи J2
-    J2 = Constants.WGS84_EARTH_C20 * -np.sqrt(5)  # C20 * (-sqrt(5)) = J2 (для Orekit)
+        initial_keplerian = KeplerianOrbit(
+            semi_major_axis,
+            eccentricity,
+            inclination,
+            raan,
+            arg_of_pericenter,
+            true_anomaly,
+            PositionAngleType.TRUE,  # Використовуємо True Anomaly (nu)
+            TEME,
+            date,
+            MU
+        )
+
+        # 2. Конвертація KeplerianOrbit у стійкий EquinoctialOrbit
+        # Використовуємо конструктор з одним аргументом, як ми виправляли раніше.
+        initial_state = EquinoctialOrbit(initial_keplerian)
+        print('new e=',initial_state.getE())
+
 
     # Імпорт потрібних класів
     HolmesFeatherstoneAttractionModel = JClass("org.orekit.forces.gravity.HolmesFeatherstoneAttractionModel")
     GravityFieldFactory = JClass(
         "org.orekit.forces.gravity.potential.GravityFieldFactory")  # Цей клас потрібен для отримання потенціалу
 
-    # Додайте до секції імпортів:
-    SphericalHarmonicsProvider = JClass("org.orekit.forces.gravity.potential.SphericalHarmonicsProvider")
-    # GravityFieldFactory = JClass("org.orekit.forces.gravity.potential.GravityFieldFactory")
+    # Налаштування кроків у секундах (змініть ці значення)
+    min_step = 0.00000001  # Зменште мінімальний крок до меншого значення
+    max_step = 1000.0
+    init_step = 60.0
 
-    # Створення моделі гравітаційного поля (наприклад, WGS84 EGM)
-    # gravity_model = HolmesFeatherstone(
-    #     ITRF,
-    #     Constants.WGS84_EARTH_EQUATORIAL_RADIUS,
-    #     MU,
-    #     # Матриця коефіцієнтів C (1 рядок для J2, оскільки J2 = -C20 * sqrt(5))
-    #     JArray(JDouble, 2)([JArray(JDouble, 2)([0.0, 0.0]), JArray(JDouble, 2)([0.0, -J2])]),
-    #     # Матриця коефіцієнтів S (просто нулі)
-    #     JArray(JDouble, 2)([JArray(JDouble, 2)([0.0, 0.0]), JArray(JDouble, 2)([0.0, 0.0])])
-    # )
+    # 2. Створіть толерантності
+    # abs_tol = JArray(JDouble)([1.0e-15, 1.0e-15, 1.0e-15])  # Абсолютна толерантність (наприклад, 1 мм)
+    # rel_tol = JArray(JDouble)([1.0e-6, 1.0e-6, 1.0e-6])  # Відносна толерантність
+    # tolerance_provider = AbsoluteToleranceProvider(abs_tol, rel_tol)
 
-    # propagator_builder = KeplerianPropagatorBuilder(
-    #     initial_state,  # Початкова оцінка
-    #     PositionAngleType.MEAN,
-    #     1.0,  # Sigma, похибка моделі (1.0 - стандартне значення)
-    # )
+    # integrator_builder = DormandPrince853IntegratorBuilder(1.0, 300.0, 1.0e-3)
 
-    integrator_builder = DormandPrince853IntegratorBuilder(1.0, 300.0, 1.0e-3)
+    # 3. Використовуйте Builder та встановіть кроки
+    integrator_builder = DormandPrince853IntegratorBuilder(
+    float(min_step),
+        float(max_step),
+        float(init_step)
+    )
+
+    # OrbitType = JClass("org.orekit.orbits.OrbitType")
+
     # ❗️ Використовуйте NumericalPropagatorBuilder:
     propagator_builder = NumericalPropagatorBuilder(
         initial_state,
         integrator_builder,
-        # OrbitType.CARTESIAN,  # Більш стійкий тип орбіти для чисельного інтегрування
+        # OrbitType.EQUINOCTIAL,
         PositionAngleType.TRUE,
-        1.0  # Sigma
+        1.0e-5 #0.1  # Sigma
     )
 
     try:
+        print('Trying to add gravitation field...', end='')
         # Завантаження стандартного гравітаційного поля (наприклад, WGS84 EGM)
         # З порядком і ступенем (degree and order) 2 - це J2.
         # Використовуємо 5x5, щоб мати трохи більше точності.
         # IERS_2010 гарантує правильні константи.
-        provider = GravityFieldFactory.getConstantNormalizedProvider(
-            5, 5, IERSConventions.IERS_2010, True
+        # provider = GravityFieldFactory.getConstantNormalizedProvider(
+        #     5, 5, IERSConventions.IERS_2010, True
+        # )
+        AbsoluteDate = JClass('org.orekit.time.AbsoluteDate')
+        # SphericalHarmonicsForce = JClass(
+        #     'org.orekit.forces.gravity.SphericalHarmonicsForce')  # Також потрібен для створення самої сили
+        j2_provider = GravityFieldFactory.getConstantNormalizedProvider(
+            2,
+            0,
+            AbsoluteDate.J2000_EPOCH
         )
 
-        # Створюємо ForceModel на основі потенціалу
-        force_model = HolmesFeatherstoneAttractionModel(ITRF, provider)
-
+        force_model = HolmesFeatherstoneAttractionModel(ITRF, j2_provider)
         propagator_builder.addForceModel(force_model)
+        print(" ✅ OK")
     except Exception as e:
         print(
-            f"⚠️ Помилка при додаванні моделі J2 (гравітаційний потенціал). Спробуйте лише NewtonianAttraction. Помилка: {e}")
+            f"\n⚠️ Помилка при додаванні моделі J2 (гравітаційний потенціал). Спробуйте лише NewtonianAttraction. Помилка: {e}")
         # Якщо не вийшло, повертаємося до базової сили (NewtonianAttraction)
         gravity = NewtonianAttraction(MU)
         propagator_builder.addForceModel(gravity)
 
+    print('Going into propagator...')
     # 3. Додаємо Будівельник до масиву (оскільки конструктор очікує масив)
     # Потрібно імпортувати JArray.
     # builder_array = JArray(KeplerianPropagatorBuilder)([propagator_builder])
@@ -241,13 +271,20 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
     builder_array = JArray(JClass("org.orekit.propagation.conversion.PropagatorBuilder"))([propagator_builder])
 
     # Оптимізатор і оцінювач
-    optimizer = LevenbergMarquardtOptimizer()
+    optimizer = LevenbergMarquardtOptimizer(
+        1.0e-3,  # 1. initialStepBoundFactor (Зазвичай 1.0)
+        1.0e-10,  # 2. costRelativeTolerance (Мала толерантність)
+        1.0e-10,  # 3. parametersRelativeTolerance (Мала толерантність)
+        1.0e-10,  # 4. costAbsoluteTolerance (Мала толерантність)
+        1.0e-10  # 5. parametersAbsoluteTolerance (Мала толерантність)
+    )
     # estimator = BatchLSEstimator(optimizer, propagator_builder)
     estimator = BatchLSEstimator(optimizer, builder_array)
     estimator.setMaxIterations(5000)  # Наприклад, 50 ітерацій
     estimator.setMaxEvaluations(10000)  # Наприклад, 100 обчислень (завжди більше, ніж ітерацій)
 
-    sigma_angular = radians(1.0 / 3600.0)  # 1 кутова секунда в радіанах
+    sigma_angular = radians(20.0 / 3600.0)  # 1 кутова секунда в радіанах
+    # print(sigma_angular)
     base_weight = 1.0
 
     for t, ra, dec in zip(times, ras, decs):
@@ -274,8 +311,19 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
 
     kep = OrbitType.KEPLERIAN.convertType(estimated_orbit)
 
+    a_meters = estimated_orbit.getA()
+    mu = estimated_orbit.getMu()
+    print(mu, a_meters)
+    # Обчислюємо середній рух (n) у радіанах/секунду за формулою: n = sqrt(mu / a^3)
+    # np має бути імпортовано (import numpy as np)
+    n_rad_per_sec = np.sqrt(mu / a_meters ** 3)
+    # Конвертація в оберти/добу для TLE
+    mm = n_rad_per_sec * 86400.0 / (2.0 * np.pi)
+    # print(mean_motion)
+
+
     elements = {
-        "a": kep.getA(),
+        "a": kep.getA()/1000,
         "e": kep.getE(),
         "i": np.degrees(kep.getI()),
         "raan": np.degrees(kep.getRightAscensionOfAscendingNode()),
@@ -293,23 +341,26 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
                 elements["a"], elements["e"], np.radians(elements["i"]),
                 np.radians(elements["raan"]), np.radians(elements["argp"]),
                 np.radians(elements["M"]),
-                norad, cospar, times[0] #.to_datetime().timestamp() / 86400.0 + 2440587.5
+                mean_motion_tle=mm,
+                norad=norad, cospar=cospar, epoch_jd=times[0] #.to_datetime().timestamp() / 86400.0 + 2440587.5
             )
 
     return {"r": r, "v": v, "elements": elements, "tle": tle}
 
 
-def make_tle_orekit(a, e, i, raan, argp, M, norad, cospar, epoch_jd):
+def make_tle_orekit(a, e, i, raan, argp, M, mean_motion_tle, norad, cospar, epoch_jd):
     """Створення TLE через Orekit"""
     TLE = JClass("org.orekit.propagation.analytical.tle.TLE")
     TLEPropagator = JClass("org.orekit.propagation.analytical.tle.TLEPropagator")
     FramesFactory = JClass("org.orekit.frames.FramesFactory")
-    Constants = JClass("org.orekit.utils.Constants")
+    # Constants = JClass("org.orekit.utils.Constants")
 
     frame = FramesFactory.getTEME()
     date = datetime_to_absolutedate(epoch_jd)
 
-    mean_motion = np.sqrt(Constants.WGS84_EARTH_MU / a ** 3) * 86400.0 / (2 * np.pi)
+    # a_km = a / 1000.0
+    # mean_motion = np.sqrt(Constants.WGS84_EARTH_MU / a ** 3) * 86400.0 / (2 * np.pi)
+
 
     # =========================================================
     # 🌟 ПАРСИНГ COSPAR НОМЕРА
@@ -337,26 +388,34 @@ def make_tle_orekit(a, e, i, raan, argp, M, norad, cospar, epoch_jd):
     bStar = 0.0
     # =========================================================
 
+    # cosparId_str = f"{launchYear}{launchNumber:03d}{launchPiece}"
+    print(        launchYear,  # 3. launchYear (int) - З COSPAR
+        launchNumber,  # 4. launchNumber (int) - З COSPAR
+        launchPiece,  # 5. launchPiece (String) - З COSPAR
+        ephemerisType,  # 6. ephemerisType (int)
+        elementNumber,  # 7. elementNumber (int)
+                  )
     # Використовуємо 18-аргументний конструктор TLE:
+    print('mean_motion=', mean_motion_tle)
     tle = TLE(
         int(norad),  # 1. satelliteNumber (int)
-        'U'[0],  # 2. classification (char)
+        'U',  # 2. classification (char)
         launchYear,  # 3. launchYear (int) - З COSPAR
         launchNumber,  # 4. launchNumber (int) - З COSPAR
         launchPiece,  # 5. launchPiece (String) - З COSPAR
         ephemerisType,  # 6. ephemerisType (int)
         elementNumber,  # 7. elementNumber (int)
         date,  # 8. epoch (AbsoluteDate)
-        float(mean_motion),  # 9. meanMotion (double)
-        meanMotionFirstDerivative,  # 10. meanMotionFirstDerivative (double)
-        meanMotionSecondDerivative,  # 11. meanMotionSecondDerivative (double)
+        float(mean_motion_tle),  # 9. meanMotion (double)
+        float(meanMotionFirstDerivative),  # 10. meanMotionFirstDerivative (double)
+        float(meanMotionSecondDerivative),  # 11. meanMotionSecondDerivative (double)
         float(e),  # 12. eccentricity (double)
         float(np.degrees(i)),  # 13. inclination (double)
         float(np.degrees(raan)),  # 14. raan (double)
         float(np.degrees(argp)),  # 15. argPerigee (double)
         float(np.degrees(M)),  # 16. meanAnomaly (double)
-        revolutionNumber,  # 17. revolutionNumber (int)
-        bStar  # 18. bStar (double)
+        int(revolutionNumber),  # 17. revolutionNumber (int)
+        float(bStar)  # 18. bStar (double)
     )
 
     # tle = TLE(

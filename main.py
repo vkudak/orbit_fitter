@@ -40,8 +40,20 @@ def main():
     # 1 28358U 04022A   23128.35604840  .00000000  00000-0  00000+0 0  9999
     # 2 28358   0.0058  35.1860 0001190  22.4337 295.5316  1.00273719 69237
 
-    methods = ['gauss','laplace', 'orekit'] if args.method == 'all' else [args.method]
-    methods = ['laplace', 'orekit'] if args.method == 'lap+orekit' else [args.method]
+    # methods = ['gauss','laplace', 'orekit'] if args.method == 'all' else [args.method]
+    # methods = ['laplace', 'orekit'] if args.method == 'lap+orekit' else [args.method]
+
+    if args.method == 'all':
+        methods = ['gauss', 'laplace', 'orekit']
+    elif args.method == 'lap+orekit':
+        methods = ['laplace', 'orekit']
+    elif args.method == 'gaus+orekit':
+        methods = ['gauss', 'orekit']
+    else:
+        methods = [args.method]
+
+    # print("\nMethods:", methods)
+
     results = {}
     state = None
     for m in methods:
@@ -50,17 +62,17 @@ def main():
             state = gauss_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
         elif m == 'laplace':
             state = laplace_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
-        elif m == 'orekit' and state is not None:
+        elif (m == 'orekit' and state is not None):
             print("We have init state...using orekit to make precise orbit")
             print(state['elements'])
-            init_jvm_orekit(orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
-            obs = times, ras, decs, errs, mags, site_n
+            init_jvm_orekit() #orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
+            # obs = times, ras, decs, errs, mags, site_n
             state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar,
                               initial_state=state)
-        elif m == 'orekit' and state is None:
+        elif (m == 'orekit' and state is None):
             print("We do not have any init state. Determine orekit orbit from zero data")
-            init_jvm_orekit(orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
-            obs = times, ras, decs, errs, mags, site_n
+            init_jvm_orekit() #orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
+            # obs = times, ras, decs, errs, mags, site_n
             state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
 
 

@@ -68,7 +68,11 @@ def laplace_od(obs, lat, lon, h, polydeg=3, make_tle=False, dbg=False, norad=999
         print("===================")
 
     # Орбітальні елементи
-    mu = MU_EARTH
+    # mu = MU_EARTH
+    from poliastro.bodies import Earth
+    from astropy import units as u
+    mu = Earth.k.to_value(u.km ** 3 / u.s ** 2)
+
     try:
         h_vec, e_vec, inc, raan, argp, nu = rv2coe(mu, r2, v2)
     except Exception as e:
