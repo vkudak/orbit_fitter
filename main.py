@@ -6,7 +6,8 @@ from geometry import topo_to_geo, iterative_topo_to_geo, iterative_topo_to_geo_v
 from io_utils import read_observations, read_tle_lines
 from methods_gauss import gauss_od
 from methods_laplace import laplace_od
-from methods_orekit import orekit_od
+# from methods_orekit import orekit_od
+from methods_orekit2 import orekit_od, init_jvm_orekit
 from refine_orbit import refine_solution, compute_rms
 from tle_compare import compare_with_tle
 
@@ -16,7 +17,7 @@ def main():
     parser.add_argument('--lat', type=float, required=False, default=22.453751)
     parser.add_argument('--lon', type=float, required=False, default=48.5635505)
     parser.add_argument('--h', type=float, default=231.1325)
-    parser.add_argument('--method', choices=['gauss','laplace','orekit', 'all'], default='all')
+    parser.add_argument('--method', choices=['gauss','laplace','orekit', 'lap+orekit', 'all'], default='all')
     parser.add_argument('--tle-line1')
     parser.add_argument('--tle-line2')
     parser.add_argument('--out-csv')
@@ -40,6 +41,7 @@ def main():
     # 2 28358   0.0058  35.1860 0001190  22.4337 295.5316  1.00273719 69237
 
     methods = ['gauss','laplace', 'orekit'] if args.method == 'all' else [args.method]
+    methods = ['laplace', 'orekit'] if args.method == 'lap+orekit' else [args.method]
     results = {}
     state = None
     for m in methods:
@@ -49,9 +51,16 @@ def main():
         elif m == 'laplace':
             state = laplace_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
         elif m == 'orekit' and state is not None:
+            print("We have init state...using orekit to make precise orbit")
+            print(state['elements'])
+            init_jvm_orekit(orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
+            obs = times, ras, decs, errs, mags, site_n
             state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar,
                               initial_state=state)
         elif m == 'orekit' and state is None:
+            print("We do not have any init state. Determine orekit orbit from zero data")
+            init_jvm_orekit(orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
+            obs = times, ras, decs, errs, mags, site_n
             state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
 
 
