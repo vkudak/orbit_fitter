@@ -67,13 +67,20 @@ def main():
             print(state['elements'])
             init_jvm_orekit() #orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
             # obs = times, ras, decs, errs, mags, site_n
-            state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar,
+            state = orekit_od(obs,
+                              args.lat, args.lon, args.h,
+                              make_tle=True,
+                              norad=norad,
+                              cospar=cospar,
                               initial_state=state)
         elif (m == 'orekit' and state is None):
             print("We do not have any init state. Determine orekit orbit from zero data")
             init_jvm_orekit() #orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
             # obs = times, ras, decs, errs, mags, site_n
-            state = orekit_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
+            state = orekit_od(obs,
+                              args.lat, args.lon, args.h,
+                              make_tle=True,
+                              norad=norad, cospar=cospar)
 
 
         r_opt, v_opt = refine_solution(obs, state, args.lat, args.lon, args.h)

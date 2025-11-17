@@ -125,6 +125,15 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
     NewtonianAttraction = JClass("org.orekit.forces.gravity.NewtonianAttraction")
     OrbitType = JClass("org.orekit.orbits.OrbitType")
     EquinoctialOrbit = JClass("org.orekit.orbits.EquinoctialOrbit")
+    AbsoluteDate = JClass('org.orekit.time.AbsoluteDate')
+
+    CelestialBodyFactory = JClass("org.orekit.bodies.CelestialBodyFactory")
+    ThirdBodyAttraction = JClass("org.orekit.forces.gravity.ThirdBodyAttraction")
+
+    # Тиск Сонячного Випромінювання (SRP)
+    SolarRadiationPressure = JClass("org.orekit.forces.radiation.SolarRadiationPressure")
+    IsotropicRadiationSingleCoefficient = JClass("org.orekit.forces.radiation.IsotropicRadiationSingleCoefficient")
+    OneAxisEllipsoid = JClass("org.orekit.bodies.OneAxisEllipsoid")
 
     UTC = TimeScalesFactory.getUTC()
     IERSConventions = JClass("org.orekit.utils.IERSConventions")
@@ -239,16 +248,10 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
         # Завантаження стандартного гравітаційного поля (наприклад, WGS84 EGM)
         # З порядком і ступенем (degree and order) 2 - це J2.
         # Використовуємо 5x5, щоб мати трохи більше точності.
-        # IERS_2010 гарантує правильні константи.
-        # provider = GravityFieldFactory.getConstantNormalizedProvider(
-        #     5, 5, IERSConventions.IERS_2010, True
-        # )
-        AbsoluteDate = JClass('org.orekit.time.AbsoluteDate')
-        # SphericalHarmonicsForce = JClass(
-        #     'org.orekit.forces.gravity.SphericalHarmonicsForce')  # Також потрібен для створення самої сили
+
         j2_provider = GravityFieldFactory.getConstantNormalizedProvider(
-            2,
-            0,
+            8,  # Degree
+            8,  # Order
             AbsoluteDate.J2000_EPOCH
         )
 
@@ -261,6 +264,39 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
         # Якщо не вийшло, повертаємося до базової сили (NewtonianAttraction)
         gravity = NewtonianAttraction(MU)
         propagator_builder.addForceModel(gravity)
+
+
+    # Отримання об'єктів небесних тіл
+    sun = CelestialBodyFactory.getSun()
+    moon = CelestialBodyFactory.getMoon()
+
+    # Створення моделей сил
+    SunAttraction = ThirdBodyAttraction(sun)
+    MoonAttraction = ThirdBodyAttraction(moon)
+
+    # Додавання до пропагатора
+    propagator_builder.addForceModel(SunAttraction)
+    propagator_builder.addForceModel(MoonAttraction)
+
+
+    #  Створення моделі Землі (OneAxisEllipsoid) для моделювання тіні
+    # Використовуємо ITRF, велику піввісь та сплющеність WGS84
+    earth_ellipsoid = OneAxisEllipsoid(
+        Constants.WGS84_EARTH_EQUATORIAL_RADIUS,
+        Constants.WGS84_EARTH_FLATTENING,  # Сплющеність WGS84
+        ITRF
+    )
+
+    sc_model = IsotropicRadiationSingleCoefficient(2.0, 0.5)  # Площа (m^2), Cr (коефіцієнт відбиття)
+
+    # Тепер аргументи відповідають: (ExtendedPositionProvider, OneAxisEllipsoid, RadiationSensitive)
+    SRP = SolarRadiationPressure(
+        CelestialBodyFactory.getSun(),  # ExtendedPositionProvider (об'єкт Сонця)
+        earth_ellipsoid,  # OneAxisEllipsoid (модель Землі)
+        sc_model  # RadiationSensitive (модель апарату)
+    )
+    propagator_builder.addForceModel(SRP)
+
 
     print('Going into propagator...')
     # 3. Додаємо Будівельник до масиву (оскільки конструктор очікує масив)
@@ -311,15 +347,15 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
 
     kep = OrbitType.KEPLERIAN.convertType(estimated_orbit)
 
-    a_meters = estimated_orbit.getA()
-    mu = estimated_orbit.getMu()
-    print(mu, a_meters)
-    # Обчислюємо середній рух (n) у радіанах/секунду за формулою: n = sqrt(mu / a^3)
-    # np має бути імпортовано (import numpy as np)
-    n_rad_per_sec = np.sqrt(mu / a_meters ** 3)
-    # Конвертація в оберти/добу для TLE
-    mm = n_rad_per_sec * 86400.0 / (2.0 * np.pi)
-    # print(mean_motion)
+    # a_meters = estimated_orbit.getA()
+    # mu = estimated_orbit.getMu()
+    # # print(mu, a_meters)
+    # # Обчислюємо середній рух (n) у радіанах/секунду за формулою: n = sqrt(mu / a^3)
+    # # np має бути імпортовано (import numpy as np)
+    # n_rad_per_sec = np.sqrt(mu / a_meters ** 3)
+    # # Конвертація в оберти/добу для TLE
+    # mm = n_rad_per_sec * 86400.0 / (2.0 * np.pi)
+    # # print(mean_motion)
 
 
     elements = {
@@ -341,25 +377,27 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
                 elements["a"], elements["e"], np.radians(elements["i"]),
                 np.radians(elements["raan"]), np.radians(elements["argp"]),
                 np.radians(elements["M"]),
-                mean_motion_tle=mm,
-                norad=norad, cospar=cospar, epoch_jd=times[0] #.to_datetime().timestamp() / 86400.0 + 2440587.5
+                # mean_motion_tle=mm,
+                norad=norad, cospar=cospar, abs_date=date #times[0] #.to_datetime().timestamp() / 86400.0 + 2440587.5
             )
 
     return {"r": r, "v": v, "elements": elements, "tle": tle}
 
 
-def make_tle_orekit(a, e, i, raan, argp, M, mean_motion_tle, norad, cospar, epoch_jd):
+def make_tle_orekit(akm, e, i, raan, argp, M, norad, cospar, abs_date):
     """Створення TLE через Orekit"""
+    # print(ak, e, i, raan, argp, M, norad, cospar, epoch_jd)
+    # print(type(ak), type(e), type(i), type(raan), type(argp), type(M), type(norad), type(cospar), type(epoch_jd))
     TLE = JClass("org.orekit.propagation.analytical.tle.TLE")
     TLEPropagator = JClass("org.orekit.propagation.analytical.tle.TLEPropagator")
     FramesFactory = JClass("org.orekit.frames.FramesFactory")
-    # Constants = JClass("org.orekit.utils.Constants")
+    Constants = JClass("org.orekit.utils.Constants")
 
     frame = FramesFactory.getTEME()
-    date = datetime_to_absolutedate(epoch_jd)
+    # date = datetime_to_absolutedate(epoch_jd)
 
-    # a_km = a / 1000.0
-    # mean_motion = np.sqrt(Constants.WGS84_EARTH_MU / a ** 3) * 86400.0 / (2 * np.pi)
+    aa = akm * 1000
+    mean_motion_tle_rev = np.sqrt(Constants.WGS84_EARTH_MU / aa ** 3) * 86400.0 / (2 * np.pi)
 
 
     # =========================================================
@@ -389,24 +427,26 @@ def make_tle_orekit(a, e, i, raan, argp, M, mean_motion_tle, norad, cospar, epoc
     # =========================================================
 
     # cosparId_str = f"{launchYear}{launchNumber:03d}{launchPiece}"
-    print(        launchYear,  # 3. launchYear (int) - З COSPAR
-        launchNumber,  # 4. launchNumber (int) - З COSPAR
-        launchPiece,  # 5. launchPiece (String) - З COSPAR
-        ephemerisType,  # 6. ephemerisType (int)
-        elementNumber,  # 7. elementNumber (int)
-                  )
+    # print(
+    #     launchYear,  # 3. launchYear (int) - З COSPAR
+    #     launchNumber,  # 4. launchNumber (int) - З COSPAR
+    #     launchPiece,  # 5. launchPiece (String) - З COSPAR
+    #     ephemerisType,  # 6. ephemerisType (int)
+    #     elementNumber,  # 7. elementNumber (int)
+    #               )
     # Використовуємо 18-аргументний конструктор TLE:
-    print('mean_motion=', mean_motion_tle)
+
+    print('mean_motion=', mean_motion_tle_rev, type(mean_motion_tle_rev))
     tle = TLE(
         int(norad),  # 1. satelliteNumber (int)
-        'U',  # 2. classification (char)
-        launchYear,  # 3. launchYear (int) - З COSPAR
-        launchNumber,  # 4. launchNumber (int) - З COSPAR
-        launchPiece,  # 5. launchPiece (String) - З COSPAR
-        ephemerisType,  # 6. ephemerisType (int)
-        elementNumber,  # 7. elementNumber (int)
-        date,  # 8. epoch (AbsoluteDate)
-        float(mean_motion_tle),  # 9. meanMotion (double)
+        'U'[0],  # 2. classification (char)
+        int(launchYear),  # 3. launchYear (int) - З COSPAR
+        int(launchNumber),  # 4. launchNumber (int) - З COSPAR
+        str(launchPiece),  # 5. launchPiece (String) - З COSPAR
+        int(ephemerisType),  # 6. ephemerisType (int)
+        int(elementNumber),  # 7. elementNumber (int)
+        abs_date,  # 8. epoch (AbsoluteDate)
+        float(mean_motion_tle_rev),  # 9. meanMotion (double)
         float(meanMotionFirstDerivative),  # 10. meanMotionFirstDerivative (double)
         float(meanMotionSecondDerivative),  # 11. meanMotionSecondDerivative (double)
         float(e),  # 12. eccentricity (double)
@@ -426,7 +466,7 @@ def make_tle_orekit(a, e, i, raan, argp, M, mean_motion_tle, norad, cospar, epoc
     # )
 
     prop = TLEPropagator.selectExtrapolator(tle)
-    pv = prop.getPVCoordinates(date, frame)
+    pv = prop.getPVCoordinates(abs_date, frame)
 
     return {
         "r": np.array([pv.getPosition().getX(), pv.getPosition().getY(), pv.getPosition().getZ()]),
