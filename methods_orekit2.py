@@ -156,14 +156,44 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
     # Якщо початковий стан не заданий — створимо грубе коло
     date = datetime_to_absolutedate(times[0])
     if initial_state is None:
-        a = EARTH_RADIUS + 35786e3
-        v = np.sqrt(MU / a)
-        pv = PVCoordinates(Vector3D(float(a), 0.0, 0.0), Vector3D(0.0, float(v), 0.0))
-        # initial_state = CartesianOrbit(pv, TEME, date, MU)
+        # a = EARTH_RADIUS + 35786e3
+        # v = np.sqrt(MU / a)
+        # pv = PVCoordinates(Vector3D(float(a), 0.0, 0.0), Vector3D(0.0, float(v), 0.0))
+        # # initial_state = CartesianOrbit(pv, TEME, date, MU)
+        #
+        # # cartesian_orbit = CartesianOrbit(pv, TEME, date, MU)
+        # # initial_state = EquinoctialOrbit(cartesian_orbit)
+        # initial_state = EquinoctialOrbit(pv, TEME, date, MU)
+        # 1. Початкове наближення для GEO
+        semi_major_axis = (Constants.WGS84_EARTH_EQUATORIAL_RADIUS + 35786e3)  # Напівось у метрах
+        eccentricity = 0.02  # Малий ненульовий ексцентриситет
 
-        # cartesian_orbit = CartesianOrbit(pv, TEME, date, MU)
-        # initial_state = EquinoctialOrbit(cartesian_orbit)
-        initial_state = EquinoctialOrbit(pv, TEME, date, MU)
+        # GEO-об'єкти зазвичай мають нахил до ~15-20 градусів
+        inclination = np.radians(0.5)  # Припустімо дуже малий нахил, наприклад, 0.5°
+
+        # Інші кути можуть бути довільними для початку, але краще їх не обнуляти
+        raan = np.radians(45.0)  # Припускаємо 0° (або np.radians(10.0))
+        arg_of_pericenter = np.radians(190.0)  # Припускаємо 90°
+        true_anomaly = np.radians(20.0)  # Припускаємо 0°
+
+        # 2. Створення KeplerianOrbit
+        initial_keplerian = KeplerianOrbit(
+            float(semi_major_axis),
+            float(eccentricity),
+            float(inclination),
+            float(raan),
+            float(arg_of_pericenter),
+            float(true_anomaly),
+            PositionAngleType.TRUE,  # Використовуємо True Anomaly (nu)
+            TEME,
+            date,
+            MU
+        )
+
+        # 3. Конвертація у стійкий EquinoctialOrbit для Estimation
+        initial_state = EquinoctialOrbit(initial_keplerian)
+
+        print("ℹ️ Orekit: Створено початковий стан GEO-кола з e=0.001, i=0.5°")
     else:
         # r2 = initial_state["r"]  # Вектор позиції (m)
         # v2 = initial_state["v"]  # Вектор швидкості (m/s)
@@ -231,6 +261,7 @@ def orekit_od(obs, lat, lon, h, initial_state=None, make_tle=False, norad=None, 
         float(max_step),
         float(init_step)
     )
+
 
     # OrbitType = JClass("org.orekit.orbits.OrbitType")
 

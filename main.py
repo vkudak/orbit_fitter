@@ -23,8 +23,8 @@ def main():
     parser.add_argument('--out-csv')
     args = parser.parse_args()
 
-    norad = 15543
-    cospar = '85010B'
+    # norad, cospar = 15543, '85010B'
+    norad, cospar = 39020, '12069A'
     file_obs = read_observations(args.obs_file)
     obs_n = file_obs[norad]
 
