@@ -1,21 +1,21 @@
 import argparse
 import sys
 
-from constants import R_GEO, RANGE_GEO
-from geometry import topo_to_geo, iterative_topo_to_geo, iterative_topo_to_geo_v2, topo_to_geo_v3
+# from constants import R_GEO, RANGE_GEO
+# from geometry import topo_to_geo, iterative_topo_to_geo, iterative_topo_to_geo_v2, topo_to_geo_v3
 from io_utils import read_observations, read_tle_lines
 from methods_gauss import gauss_od
 from methods_laplace import laplace_od
-# from methods_orekit import orekit_od
 from methods_orekit2 import orekit_od, init_jvm_orekit
 from refine_orbit import refine_solution, compute_rms
 from tle_compare import compare_with_tle
 
+
 def main():
     parser = argparse.ArgumentParser(description='Orbit determination from optical measurements')
     parser.add_argument('obs_file')
-    parser.add_argument('--lat', type=float, required=False, default=22.453751)
-    parser.add_argument('--lon', type=float, required=False, default=48.5635505)
+    parser.add_argument('--lat', type=float, required=False, default=48.5635505)
+    parser.add_argument('--lon', type=float, required=False, default=22.453751)
     parser.add_argument('--h', type=float, default=231.1325)
     parser.add_argument('--method', choices=['gauss','laplace','orekit', 'lap+orekit', 'all'], default='all')
     parser.add_argument('--tle-line1')
@@ -23,19 +23,25 @@ def main():
     parser.add_argument('--out-csv')
     args = parser.parse_args()
 
-    # norad, cospar = 15543, '85010B'
-    norad, cospar = 39020, '12069A'
+    # print(args.lat, args.lon, args.h)
+    # print(type(args.lat), type(args.lon), type(args.h))
+    # sys.exit()
+
+    norad, cospar = 15543, '85010B'
+    # norad, cospar = 39020, '12069A'
     file_obs = read_observations(args.obs_file)
     obs_n = file_obs[norad]
 
     times, ras, decs, errs, mags, site_n = (
         obs_n["time"], obs_n["ra"], obs_n["dec"], obs_n["err"], obs_n["mag"], obs_n["point"]
     )
-    geo_ras, geo_decs = topo_to_geo(times, ras, decs, args.lat, args.lon, args.h, assumed_range_km=RANGE_GEO)
+    # geo_ras, geo_decs = topo_to_geo(times, ras, decs, args.lat, args.lon, args.h, assumed_range_km=RANGE_GEO)
 
     # geo_ras, geo_decs = topo_to_geo_v3(times, ras, decs, args.lat, args.lon, args.h, assumed_range_km=RANGE_GEO)
 
-    obs = times, geo_ras, geo_decs, errs, mags, site_n
+    # obs = times, geo_ras, geo_decs, errs, mags, site_n
+    obs = times, ras, decs, errs, mags, site_n
+
 
     # 1 28358U 04022A   23128.35604840  .00000000  00000-0  00000+0 0  9999
     # 2 28358   0.0058  35.1860 0001190  22.4337 295.5316  1.00273719 69237
@@ -62,18 +68,17 @@ def main():
             state = gauss_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
         elif m == 'laplace':
             state = laplace_od(obs, args.lat, args.lon, args.h, make_tle=True, norad=norad, cospar=cospar)
-        elif (m == 'orekit' and state is not None):
+        elif (m == 'orekit') and (state is not None):
             print("We have init state...using orekit to make precise orbit")
             print(state['elements'])
             init_jvm_orekit() #orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
             # obs = times, ras, decs, errs, mags, site_n
             state = orekit_od(obs,
                               args.lat, args.lon, args.h,
-                              make_tle=True,
-                              norad=norad,
-                              cospar=cospar,
+                              make_tle=False,
+                              norad=norad, cospar=cospar,
                               initial_state=state)
-        elif (m == 'orekit' and state is None):
+        elif (m == 'orekit') and (state is None):
             print("We do not have any init state. Determine orekit orbit from zero data")
             init_jvm_orekit() #orekit_dir="/home/vkudak/orekit_lib/", data_dir="orekit-data")
             # obs = times, ras, decs, errs, mags, site_n
