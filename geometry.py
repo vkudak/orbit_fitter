@@ -4,15 +4,27 @@ from astropy.coordinates import CartesianRepresentation
 import astropy.units as u
 from astropy.time import Time
 
+# def ra_dec_to_unitvec_icrs(ras_deg, decs_deg):
+#     ras = np.deg2rad(ras_deg)
+#     decs = np.deg2rad(decs_deg)
+#     x = np.cos(decs) * np.cos(ras)
+#     y = np.cos(decs) * np.sin(ras)
+#     z = np.sin(decs)
+#     # v = np.vstack((x,y,z)).T
+#     # v = v / np.linalg.norm(v, axis=1)[:, None]
+#     # return v
+#     return np.column_stack((x, y, z))
+
+
 def ra_dec_to_unitvec_icrs(ras_deg, decs_deg):
-    ras = np.deg2rad(ras_deg)
-    decs = np.deg2rad(decs_deg)
-    x = np.cos(decs) * np.cos(ras)
-    y = np.cos(decs) * np.sin(ras)
-    z = np.sin(decs)
-    v = np.vstack((x,y,z)).T
-    v = v / np.linalg.norm(v, axis=1)[:, None]
-    return v
+    ra = np.deg2rad(np.asarray(ras_deg, dtype=float).ravel())
+    dec = np.deg2rad(np.asarray(decs_deg, dtype=float).ravel())
+    return np.column_stack((
+        np.cos(dec) * np.cos(ra),
+        np.cos(dec) * np.sin(ra),
+        np.sin(dec)
+    ))
+
 
 def station_positions_gcrs(lat_deg, lon_deg, height_m, times):
     loc = EarthLocation(lat=lat_deg*u.deg, lon=lon_deg*u.deg, height=height_m*u.m)

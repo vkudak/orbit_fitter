@@ -119,15 +119,36 @@ def laplace_od(
          cosd * ddec
     ])
 
+    mu = Earth.k.to_value(u.km ** 3 / u.s ** 2)
     # ===== Початковий rho0 (мінімальний паралакс) =====
     # Дуже проста робоча оцінка:
     # Беремо напрямок на середині — шукаємо rho мінімізуючи відхилення LOS
     # Тобто шукаємо пересічення з "наближеною" сферою великого радіусу ~ 40000 km
     # Але не фіксуємо GEO.
-    rho0 = 40000.0  # стартове припущення
+    # rho0 = 40000.0  # стартове припущення
+    #
+    # r2_0 = R0 + rho0 * los_mid
+    # v2_0 = rho0 * los_dot_mid  # init
 
-    r2_0 = R0 + rho0 * los_mid
-    v2_0 = rho0 * los_dot_mid  # init
+    # Гарне початкове наближення: припустимо кругова орбіта на висоті GEO
+    alt_guess = 35786 * u.km
+    a_guess = (Earth.R.to(u.km).value + alt_guess.value)
+    v_circ = np.sqrt(mu / a_guess)
+
+    # Напрямок швидкості — перпендикулярний до r і los
+    r_guess = R0 + 40000 * los_mid
+    r_guess /= np.linalg.norm(r_guess)
+
+    # Приблизно тангенціальна швидкість
+    los_cross_z = np.cross(los_mid, [0, 0, 1])
+    if np.linalg.norm(los_cross_z) < 0.1:
+        tang_dir = np.cross(los_mid, [0, 1, 0])
+    else:
+        tang_dir = los_cross_z
+    tang_dir /= np.linalg.norm(tang_dir)
+
+    v2_0 = v_circ * tang_dir
+    r2_0 = R0 + 40000 * los_mid
 
     if dbg:
         print("[INIT] rho0=", rho0, " r2_0=", r2_0, " v2_0=", v2_0)
@@ -136,7 +157,6 @@ def laplace_od(
     los_obs = los_all
     R_sites_all = R_sites
 
-    mu = Earth.k.to_value(u.km**3 / u.s**2)
 
     def residuals(x):
         r2 = x[0:3]

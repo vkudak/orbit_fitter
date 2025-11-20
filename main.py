@@ -5,7 +5,7 @@ import sys
 # from geometry import topo_to_geo, iterative_topo_to_geo, iterative_topo_to_geo_v2, topo_to_geo_v3
 from io_utils import read_observations, read_tle_lines
 from methods_gauss import gauss_od
-from methods_laplace import laplace_od
+from methods_laplace_new2 import laplace_od
 from methods_orekit2 import orekit_od, init_jvm_orekit
 from refine_orbit import refine_solution, compute_rms
 from tle_compare import compare_with_tle
